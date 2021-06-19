@@ -16,9 +16,11 @@
 
 void sub_velocity_cb(const geometry_msgs::Twist msg);
 void sub_velocity_stamped_cb(const geometry_msgs::TwistStamped msg);
-void init_marker(visualization_msgs::Marker & marker, const std::string frame_id, const std::string ns);
+void init_marker(visualization_msgs::Marker & marker, const std::string frame_id, const std::string ns, const std_msgs::ColorRGBA color);
 void vector_to_marker(visualization_msgs::Marker & marker, const geometry_msgs::Vector3 vec3, const double scale);
+std_msgs::ColorRGBA color_rgba(float r, float g, float b, float a);
 geometry_msgs::Twist twist;
+bool is_new_twist;
 
 int main(int argc, char** argv)
 {
@@ -34,7 +36,6 @@ int main(int argc, char** argv)
 	double publish_frequency;
 
 	nh_priv.param<std::string>("base_frame", base_frame, "world");
-	nh_priv.param<std::string>("twist_topic", twist_topic, "cmd_vel");
 	nh_priv.param<bool>("is_stamped", is_stamped, false);
 	nh_priv.param<double>("velocity_scale", velocity_scale, 1.0);
 	nh_priv.param<double>("anglular_velocity_scale", anglular_velocity_scale, 1.0);
@@ -46,24 +47,27 @@ int main(int argc, char** argv)
 	/// subscriber
 	ros::Subscriber sub_velocity;
 	if(is_stamped){
-		sub_velocity = nh.subscribe(twist_topic, 1, sub_velocity_stamped_cb);
+		sub_velocity = nh.subscribe("cmd_vel", 1, sub_velocity_stamped_cb);
 	}
 	else{
-		sub_velocity = nh.subscribe(twist_topic, 1, sub_velocity_cb);
+		sub_velocity = nh.subscribe("cmd_vel", 1, sub_velocity_cb);
 	}
 
 	/// setup markers
 	visualization_msgs::Marker vel_marker, ang_vel_marker;
-	init_marker(vel_marker, base_frame, "velocity");
-	init_marker(ang_vel_marker, base_frame, "angular_velocity");
+	init_marker(vel_marker, base_frame, "velocity", color_rgba(0.6f, 0.6f, 0.0f, 1.0f));
+	init_marker(ang_vel_marker, base_frame, "angular_velocity", color_rgba(0.0f, 0.6f, 0.6f, 1.0f));
 
 	ros::Rate rate(publish_frequency);
 	while(nh.ok())
 	{
-		vector_to_marker(vel_marker, twist.linear, velocity_scale);
-		pub_marker.publish(vel_marker);
-		vector_to_marker(ang_vel_marker, twist.angular, anglular_velocity_scale);
-		pub_marker.publish(ang_vel_marker);
+		if(is_new_twist){
+			is_new_twist = false;
+			vector_to_marker(vel_marker, twist.linear, velocity_scale);
+			pub_marker.publish(vel_marker);
+			vector_to_marker(ang_vel_marker, twist.angular, anglular_velocity_scale);
+			pub_marker.publish(ang_vel_marker);
+		}
 
 		ros::spinOnce();
 		rate.sleep();
@@ -76,6 +80,7 @@ int main(int argc, char** argv)
 void sub_velocity_stamped_cb(const geometry_msgs::TwistStamped msg)
 {
 	twist = msg.twist;
+	is_new_twist = true;
 }
 
 /**
@@ -84,12 +89,13 @@ void sub_velocity_stamped_cb(const geometry_msgs::TwistStamped msg)
 void sub_velocity_cb(const geometry_msgs::Twist msg)
 {
 	twist = msg;
+	is_new_twist = true;
 }
 
 /**
  * initialize marker
  */
-void init_marker(visualization_msgs::Marker & marker, const std::string frame_id, const std::string ns)
+void init_marker(visualization_msgs::Marker & marker, const std::string frame_id, const std::string ns, const std_msgs::ColorRGBA color)
 {
 		// Set the frame ID and timestamp.  See the TF tutorials for information on these.
 		marker.header.frame_id = frame_id;		
@@ -120,12 +126,9 @@ void init_marker(visualization_msgs::Marker & marker, const std::string frame_id
 		marker.scale.z = 0.1;
 
 		// Set the color -- be sure to set alpha to something non-zero!
-		marker.color.r = 0.6f;
-		marker.color.g = 0.6f;
-		marker.color.b = 0.0f;
-		marker.color.a = 1.0;
+		marker.color = color;
 
-		marker.lifetime = ros::Duration();
+		marker.lifetime = ros::Duration(10);
 }
 
 /**
@@ -152,4 +155,14 @@ void vector_to_marker(visualization_msgs::Marker & marker, const geometry_msgs::
 			marker.scale.z = 0;
 		}
 		marker.header.stamp = ros::Time::now();
+}
+
+std_msgs::ColorRGBA color_rgba(float r, float g, float b, float a)
+{
+	std_msgs::ColorRGBA color;
+	color.r = r;
+	color.g = g;
+	color.b = b;
+	color.a = a;
+	return color;
 }
